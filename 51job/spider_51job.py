@@ -4,8 +4,9 @@ create at: 09/01/2018
 description:
     Spider for 51 Job
 Change log:
-Date        Author      Version    Description
-09/01/2018  xiche       1.0        Set up
+Date        Author      Version     Description
+09/01/2018  xiche       1.0         Set up
+
 '''
 import requests
 import os
@@ -30,19 +31,19 @@ class JobInfo(object):
     company = ''
     location = ''
     __salary = ''
-    __salary_with_units = ''
-    salary_min = 9999
-    date_release = ''
+    salary_with_units = ''
+    salary_min = 9999999
+    salary_avg = 9999999
+    __date_release = ''
     def __str__(self):
         return ','.join([self.job_title, self.company, self.location, self.salary, self.date_release])
     
     @property
     def salary(self):
         return self.__salary
-       
+
     @salary.setter
     def salary(self, salary):
-    # categories=['千/月', '万/月', '万/年']
         if not salary or salary == '':
             self.__salary =  'UNKNOWN'
             return
@@ -52,6 +53,7 @@ class JobInfo(object):
            salary_min = matchObj.group(1)
            salary_max = matchObj.group(2)
            salary_units = matchObj.group(3)
+
         categories = {
             "千/月":lambda x:round(x, 0),
             "万/月":lambda x:round(x*10, 0),
@@ -61,15 +63,20 @@ class JobInfo(object):
         # print(salary_min, salary_units)
         salary_min = categories[salary_units](float(salary_min))
         salary_max = categories[salary_units](float(salary_max))
-        salary_units = 'K/M'
+        salary_avg = (salary_min+salary_max)/2
+        salary_units = 'K'
         self.salary_min = float(salary_min)
-        self.__salary_with_units =  "{:.0f}-{:.0f}{}".format(salary_min, salary_max, salary_units)
-        self.__salary = "{:.0f}-{:.0f}".format(salary_min, salary_max)
+        self.salary_avg = salary_avg
+        # self.__salary_with_units =  "{:.0f}-{:.0f}{}".format(salary_min, salary_max, salary_units)
+        # self.__salary = "{:.0f}-{:.0f}".format(salary_min, salary_max)
+        self.salary_with_units = "{:.0f}{}".format(salary_avg, salary_units)
+        self.__salary = "{:.0f}".format(salary_avg)
 
 class Spider51Job(Spider):
     start       = 0
     page_total  = 1
     list_job_info = []
+    str_search  = '道富'
     def __init__(self, page=2):
         self.url_request = 'https://search.51job.com/list/080200,000000,0000,00,9,99,{keyword},2,{page_num}.html?'\
                             'lang=c&stype=&postchannel=0000&workyear=99&cotype=99&degreefrom=99&jobterm=99'\
@@ -86,6 +93,8 @@ class Spider51Job(Spider):
         for job_div in list_job_soup.find_all('div', class_='el'): #list_job_soup.find_all('div', attrs={'class': 'el'})
             job_info = JobInfo()
             # print(job_div.select('div[class="el"]'))
+            # print(job_info)
+            # print(job_div.select('p'))
             if not job_div.select('p'):
                 continue
             if job_div.find('p',class_='t1'):
@@ -93,8 +102,8 @@ class Spider51Job(Spider):
 
             if job_div.find('span',class_='t2').find('a'):
                 job_info.company = job_div.find('span',class_='t2').find('a').getText().strip()
-                if(not '道富' in job_info.company): continue
-
+                if(not self.str_search in job_info.company): continue
+                       
             if job_div.find('span',class_='t3'):
                 job_info.location = job_div.find('span',class_='t3').getText().strip()
 
@@ -104,15 +113,15 @@ class Spider51Job(Spider):
             if job_div.find('span',class_='t5'):
                 job_info.date_release = job_div.find('span',class_='t5').getText().strip()   
             self.list_job_info.append(job_info)
+            # print(job_info)
 
         # get total page
         page_info = list_job_soup.find(class_='p_in').find('span', class_='td').getText().strip()
         self.page_total = int(re.sub(r'\D', "", page_info))
     
-    def generate_chart_bar(self, item_name, item_name_list, item_num_list):
-        subtitle = "Salary Range RMB(K/Month)"
+    def generate_chart_bar(self, item_name, sub_title, item_name_list, item_num_list):
         bar = Bar(item_name,page_title = item_name,title_text_size=30,title_pos='center',\
-            subtitle = subtitle,subtitle_text_size = 25)
+            subtitle = sub_title,subtitle_text_size = 25)
         
         bar.add("", item_name_list, item_num_list,title_pos='center', xaxis_interval=0,xaxis_rotate=27,\
             xaxis_label_textsize = 20,yaxis_label_textsize = 20,yaxis_name_pos='end',yaxis_pos = "%50")
@@ -120,7 +129,7 @@ class Spider51Job(Spider):
 
         grid = Grid(width=1300,height= 800)
         grid.add(bar,grid_top = "13%",grid_bottom = "23%",grid_left = "15%",grid_right = "15%")
-        out_file_name = './'+item_name+'.html'
+        out_file_name = './analysis_result/'+item_name+'.html'
         grid.render(out_file_name)
 
     def generate_word_cloud(self, item_name,item_name_list,item_num_list,word_size_range):
@@ -128,7 +137,7 @@ class Spider51Job(Spider):
         wordcloud = WordCloud(width=1400,height= 900)
         
         wordcloud.add("", item_name_list, item_num_list,word_size_range=word_size_range,shape='pentagon')
-        out_file_name = './'+item_name+'.html'
+        out_file_name = './analysis_result/'+item_name+'.html'
         wordcloud.render(out_file_name)
 
     def counter2list(self, _counter):
@@ -140,9 +149,9 @@ class Spider51Job(Spider):
         return name_list,num_list
 
     def analyse_job_info(self):
-        self.list_job_info.sort(key=lambda x:x.salary_min,reverse=False)
+        self.list_job_info.sort(key=lambda x:x.salary_avg,reverse=False)
         
-        list_salary_all = [x.salary for x in self.list_job_info]
+        list_salary_all = [x.salary_with_units for x in self.list_job_info]
         list_salary_unique = []
         for salary in list_salary_all:
             if salary not in list_salary_unique:
@@ -153,11 +162,25 @@ class Spider51Job(Spider):
         list_salary_count = []
         for salary in list_salary_unique:
             list_salary_count.append(list_salary_all.count(salary))
-
         # print(list_salary_unique)
         # print(list_salary_count)
-        
-        self.generate_chart_bar('StateStreet Hot Job on 51job - Salary',list_salary_unique, list_salary_count)
+        self.generate_chart_bar('Hot Job on 51job - Salary [{}]'.format(self.str_search), "Salary Range RMB(K/Month)", list_salary_unique, list_salary_count)
+
+        list_date_release = [x.date_release[:2] for x in self.list_job_info]
+        list_date_release_unique = []
+        for date_release in list_date_release:
+            if date_release not in list_date_release_unique:
+                list_date_release_unique.append(date_release)
+
+        list_date_release_count = []
+        for date_release in list_date_release_unique:
+            list_date_release_count.append(list_date_release.count(date_release))
+        # time_array = time.strptime(date_release, '%m-%d')
+        # time.strftime("%Y/%m/%d %H:%M:%S", timeArray)
+        # self.date_release = time.strftime("%m", time_array)
+
+        self.generate_chart_bar('Hot Job on 51job - JobReleasedCount [{}]'.format(self.str_search),"Numbers of released jobs at recent month",list_date_release_unique, list_date_release_count)
+
         job_title_counter = Counter()
         for job_info in self.list_job_info:
             tag_list = jieba.analyse.extract_tags(job_info.job_title)
@@ -166,10 +189,15 @@ class Spider51Job(Spider):
 
         name_list,num_list = self.counter2list(job_title_counter.most_common(200))
 
-        self.generate_word_cloud('StateStreet Hot Job on 51job - Keywork',name_list,num_list,[20,100])
+        self.generate_word_cloud('Hot Job on 51job - Keywork [{}]'.format(self.str_search),name_list,num_list,[20,100])
+
+        list_job_title = [x.job_title for x in self.list_job_info]
+
+        num_list = [5 for i in range(1,len(list_job_title)+1)]
+        self.generate_word_cloud('Hot Job on 51job - JobTitle [{}]'.format(self.str_search),list_job_title,num_list,[18,18])
 
     def start_spider(self):
-        str_search  = '道富'
+       
         page_num    = 1
         # str_search = quote(str_search, 'utf-8')
         # str_search = quote(str_search, 'utf-8')
@@ -182,13 +210,13 @@ class Spider51Job(Spider):
             else:
                 print(info_02)
 
-            self.url_request =self.url_request.format(keyword = str_search, page_num = page_num)
+            self.url_request =self.url_request.format(keyword = self.str_search, page_num = page_num)
             self.download_page()
             # self.save_page_to_file()
             # self.get_page_from_saved_file()
             self.parse_html()
             page_num += 1
-            print('wait 1 second...' )
+            # print('wait 1 second...' )
             time.sleep(1)
             
         self.analyse_job_info()
@@ -199,6 +227,7 @@ class Spider51Job(Spider):
 
 if __name__ == '__main__':
     spider_51job = Spider51Job()
+    spider_51job.str_search = '执御'
     spider_51job.start_spider()
     # line = "0.8-1.5万/月"
     # matchObj = re.match( '([0-9]{1,}[.][0-9]*)-([0-9]{1,}[.][0-9]*)(\S/\S)', line, re.M|re.I)
