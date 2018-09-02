@@ -44,17 +44,24 @@ class JobInfo(object):
 
     @salary.setter
     def salary(self, salary):
+        # print(salary)
         if not salary or salary == '':
             self.__salary =  'UNKNOWN'
             return
-        matchObj = re.match( '([0-9]{1,}.*[0-9]*)-([0-9]{1,}.*[0-9]*)(\S/\S)', salary, re.M|re.I)
-        
-        if matchObj:
-           salary_min = matchObj.group(1)
-           salary_max = matchObj.group(2)
-           salary_units = matchObj.group(3)
-
+        if "元/天" in salary:
+            matchObj = re.match( '(\d+)(\S/\S)', salary, re.M|re.I)
+            if matchObj:
+                salary_min = matchObj.group(1)
+                salary_max = matchObj.group(1)
+                salary_units = matchObj.group(2)
+        else:
+            matchObj = re.match( '([0-9]{1,}.*[0-9]*)-([0-9]{1,}.*[0-9]*)(\S/\S)', salary, re.M|re.I)
+            if matchObj:
+                salary_min = matchObj.group(1)
+                salary_max = matchObj.group(2)
+                salary_units = matchObj.group(3)
         categories = {
+            "元/天":lambda x:round(x*30, 0),
             "千/月":lambda x:round(x, 0),
             "万/月":lambda x:round(x*10, 0),
             "万/年":lambda x:round(x/12*10, 0)
@@ -227,7 +234,7 @@ class Spider51Job(Spider):
 
 if __name__ == '__main__':
     spider_51job = Spider51Job()
-    spider_51job.str_search = '执御'
+    spider_51job.str_search = '恒生电子'
     spider_51job.start_spider()
     # line = "0.8-1.5万/月"
     # matchObj = re.match( '([0-9]{1,}[.][0-9]*)-([0-9]{1,}[.][0-9]*)(\S/\S)', line, re.M|re.I)
